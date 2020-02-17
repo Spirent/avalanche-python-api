@@ -42,6 +42,10 @@
 # 1.1.5    01/10/2017 by Matthew Jefferson
 #           -Fixed a small issue with integers.
 #
+# 1.1.6    01/10/2017 by Matthew Jefferson
+#           -Fixed a small issue the getEvents() method. Window path delimiters
+#            need to be changed from "\"" to "/".
+#
 ###############################################################################
 
 ###############################################################################
@@ -581,6 +585,10 @@ class AVA:
 
         tclresult = self.Exec(tclcode)
 
+        # Convert any backslashes to forward slashes. This may happen on Windows, which uses the backslash
+        # for file path delimiters.
+        tclresult = re.sub(r"\\", r"/", tclresult)
+
         # The goal is to create a Python list of dictionaries, where element of the list
         # is a Avalanche Event dictionary with the keys "message", "additional" and "name".
         # The "additional" key is also a dictionary.
@@ -710,7 +718,7 @@ class AVA:
         return porthandle
 
     #==============================================================================
-    def reserveAll(self, test, force=False):
+    def reserveAll(self, test, force=False, chassistype=""):
         # Reserve all of the interfaces defined in the test.
         # Do this by determining the existing interfaces, and then reserving them.
         # The user only need set the "port" attribute for each interface object
@@ -733,7 +741,7 @@ class AVA:
                     # We need to connect to the chassis to pull the physical port information.
                     # We could do this more efficiently (only connect once per unquie chassis).                
                     chassisip = self.get(interface, "adminIPAddress")
-                    self.connect(chassisip)
+                    self.connect(chassisip, type=chassistype)
 
                     # Locate the physical port referenced by the "location".
                     for chassis in self.get("system1.physicalchassismanager", "physicalchassis").split():
@@ -1358,8 +1366,11 @@ class AVA:
         self.Exec('lappend ::auto_path [file normalize ' + generallibpath + ']')
         self.Exec('lappend ::auto_path [file normalize ' + oslibpath + ']')
 
+        logging.info("-------------------------------------------------------------")
         logging.info("Tcl Version  = " + self.tcl.eval("info patchlevel"))
+        logging.info("Tbcload Version  = " + self.tcl.eval("package require tbcload"))
         logging.info("Tcl ::auto_path = " + self.tcl.eval('set ::auto_path'))
+        logging.info("-------------------------------------------------------------")
         logging.info("Loading the Avalanche API in the Tcl interpreter...")
         self.Exec("package require av")
 

@@ -12,10 +12,10 @@ This functionality is enabled by placing a Python translation layer on top of th
 ### How do I get set up? ###
 
 The code is hosted here: 
-    https://github.com/spirent/avalanche-python-api
+    https://github.com/Spirent/avalanche-python-api
 
 You can download a copy of the library directly:
-    https://github.com/spirent/avalanche-python-api/archive/master.zip
+    https://github.com/Spirent/avalanche-python-api/archive/master.zip
 
 Or use PyPI:
     pip install avalancheapi
