@@ -1334,8 +1334,13 @@ class AVA:
 
         if apipath:     
             # Add the path to the API so that Tcl can find it.
-            libpath = apipath + "/lib"        
+            #libpath = apipath + "/lib"        
             #libpath = "C:/Tcl/ActiveTcl8.6.9_64bit/lib"
+
+            # I HIGHLY recommend creating a lib directory in the same directory as the Avalanche Python wrapper.
+            libpath = os.path.dirname(__file__)
+            libpath = os.path.abspath(libpath)
+            libpath = os.path.join(libpath, "lib")
 
             # Add brackets just in case the path has spaces.
             apipath = "{" + apipath + "}"
