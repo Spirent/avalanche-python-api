@@ -46,6 +46,13 @@
 #           -Fixed a small issue the getEvents() method. Window path delimiters
 #            need to be changed from "\"" to "/".
 #
+# 2.0.0    10/02/2020 by Matthew Jefferson
+#           -Replaced tkinter with the subprocess module. This was done because
+#            tkinter's version of Tcl is fixed to the version of Python used.
+#            This made it very challenging to find the necessary Tcl packages
+#            required by the Avalanche API. Also, moving to subprocess should
+#            allow 64-bit Python to use 32-bit Tcl.
+#
 ###############################################################################
 
 ###############################################################################
@@ -93,6 +100,8 @@ import sys
 import getpass          # Used to retrieve the username.
 import ast              # Used to convert strings to dict.
 import os
+import atexit
+import re
 
 from shutil import copyfile     # Used for copying files.
 
@@ -100,12 +109,15 @@ from shutil import copyfile     # Used for copying files.
 import logging
 import datetime
 import inspect
+
 #from inspect import getargvalues, stack
 
-if sys.hexversion >= 0x03000000:
-   from tkinter import *
-else:
-   from Tkinter import *
+# if sys.hexversion >= 0x03000000:
+#    from tkinter import *
+# else:
+#    from Tkinter import *
+
+from subprocess import Popen, PIPE
 
 class AVA:
     ###############################################################################
@@ -150,10 +162,10 @@ class AVA:
         
         result = self.Exec(tclcode)
 
-        logging.info("ABL Log Location: " + self.tcl.eval("av::get system1 -ablLogLocation"))
-        logging.info("Username: " + self.tcl.eval("av::get system1 -user"))
-        logging.info("Workspace: " + self.tcl.eval("av::get system1 -workspace"))
-        logging.info("Project Path: " + self.tcl.eval("av::get system1.metainfo -defaultDirectoryPath"))
+        logging.info("ABL Log Location: " + self.Exec("av::get system1 -ablLogLocation"))
+        logging.info("Username: " + self.Exec("av::get system1 -user"))
+        logging.info("Workspace: " + self.Exec("av::get system1 -workspace"))
+        logging.info("Project Path: " + self.Exec("av::get system1.metainfo -defaultDirectoryPath"))
 
         logging.debug(" - Python result  - " + str(result))
         return result
@@ -601,9 +613,10 @@ class AVA:
         tclcode += "    append pythonlist \\\"$event\\\" , "
         tclcode += "};"        
         tclcode += "return $pythonlist"
-        tclresult = self.tcl.eval(tclcode)
+        #tclresult = self.Exec(tclcode)
         # This step is what converts the Tcl string to a list.
-        listofstrings = ast.literal_eval(tclresult)
+        #listofstrings = ast.literal_eval(tclresult)
+        listofstrings = self.Exec(tclcode)
 
         # Now convert each list element to a dictionary.
         for event in listofstrings:   
@@ -614,8 +627,9 @@ class AVA:
             tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
             tclcode += "}; append pythondict \}; return $pythondict"
 
-            tclresult = self.tcl.eval(tclcode)
-            eventdict = ast.literal_eval(tclresult)
+            #tclresult = self.tcl.eval(tclcode)
+            #eventdict = ast.literal_eval(tclresult)
+            eventdict = self.Exec(tclcode)
 
             # The "addtional" field may contain an additional list of information.
             # This is also converted into a dictionary.
@@ -625,8 +639,9 @@ class AVA:
                 tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
                 tclcode += "}; append pythondict \}; return $pythondict"
 
-                tclresult = self.tcl.eval(tclcode)
-                eventdict["additional"] = ast.literal_eval(tclresult)
+                #tclresult = self.tcl.eval(tclcode)
+                #eventdict["additional"] = ast.literal_eval(tclresult)
+                eventdict["additional"] = self.Exec(tclcode)
 
             eventlist.append(eventdict)
 
@@ -979,8 +994,9 @@ class AVA:
         """
         self.LogCommand()
         tclcode = "av::nodeExists " + handle
-        tclresult = self.Exec(tclcode)
-        result = ast.literal_eval(tclresult)
+        #tclresult = self.Exec(tclcode)
+        #result = ast.literal_eval(tclresult)
+        result = self.Exec(tclcode)
         logging.debug(" - Python result  - " + str(result))
         return result
 
@@ -1120,60 +1136,73 @@ class AVA:
     ####
     ###############################################################################
 
+    # def Exec(self, command):
+    #     logging.debug(" - Tcl command - " + command)
+        
+    #     try:
+    #         result = self.tcl.eval(command)
+
+    #     except Exception as errmsg:
+    #         logging.error(errmsg)            
+    #         raise
+        
+    #     logging.debug(" - Tcl result  - " + result)
+    #     return result
+
     def Exec(self, command):
         logging.debug(" - Tcl command - " + command)
-        
-        try:
-            result = self.tcl.eval(command)
 
-        except Exception as errmsg:
-            logging.error(errmsg)            
-            raise
+        # This is a little odd.
+        # We are wrapping the Tcl code in a catch. This will allow us to detect exceptions.
+        # All output must be sent to STDOUT, which is why we are using the "puts" command.
+        # Lastly, the final newline "\n" is ESSENTIAL. Without it, the while loop will hang.
+        tcl_code = "if { [catch {puts [" + command + "]} errmsg] } { puts $errmsg; puts tcl_cmd_exception } else { puts tcl_cmd_success }\n"    
+        self.tcl.stdin.write(tcl_code)
         
-        logging.debug(" - Tcl result  - " + result)
+        # NOTE: tcl.stdin.flush() does not seem to be needed. Consider if needed.
+        result = ""
+
+        stop = False
+        cmd_exception = False
+        while not stop:                
+            line = self.tcl.stdout.readline()
+
+            if re.search("tcl_cmd_success", line):
+                stop = True
+            elif re.search("tcl_cmd_exception", line):
+                stop = True
+                cmd_exception = True
+            else:
+                result += line
+
+        result = result.strip()
+
+        if cmd_exception:        
+            # An exception occurred during the execution of the Tcl command.
+            logging.error(result)           
+            raise Exception(result)
+
+        logging.debug(" - Tcl result  - " + result)            
+
+        # Attempt to convert to a Python type, otherwise, leave it as a string.
+        try:
+            result = ast.literal_eval(result)
+        except:
+            pass
+
         return result
+
 
     #==============================================================================
     def List2Dict(self, result):
         # Converts a Tcl list (which is a string) into a Python dictionary.       
 
-        # Use Tcl to convert the list into a Python-friendly dict string.
-        tclcode =  "proc isnumeric value {                           \n\
-                        if {![catch {expr {abs($value)}}]} {         \n\
-                            return 1                                 \n\
-                        }                                            \n\
-                        set value [string trimleft $value 0]         \n\
-                        if {![catch {expr {abs($value)}}]} {         \n\
-                            return 1                                 \n\
-                        }                                            \n\
-                        return 0                                     \n\
-                    }                                                \n\
-                    proc tclList2Dict { args } {                     \n\
-                        set result $args                             \n\
-                        set output {}                                \n\
-                        foreach {key value} $result {                \n\
-                            regsub {^-} $key {} key                  \n\
-                            if { [isnumeric $value] } {              \n\
-                                append output \"'$key': $value, \"   \n\
-                            } else {                                 \n\
-                                regsub -all {'} $value {\\'} value   \n\
-                                regsub -all {\"} $value {\\\"} value \n\
-                                append output \"'$key': '$value', \" \n\
-                            }                                        \n\
-                        }                                            \n\
-                                                                     \n\
-                        regsub {, $} $output {} output               \n\
-                        set output [list $output]                    \n\
-                        return $output                               \n\
-                    }"
-
-        # This eval instantiates the Tcl procedures.
-        self.tcl.eval(tclcode)
         # This eval executes the Tcl procedure and returns the result.
-        tclresult = self.tcl.eval("tclList2Dict " + result)
+        #tclresult = self.tcl.eval("tclList2Dict " + result)
 
         # This command converts the Tcl string into a dict object.
-        return ast.literal_eval(tclresult)
+        #return ast.literal_eval(tclresult)
+        return self.Exec("tclList2Dict " + result)
 
     #==============================================================================
     def convertEventString(self, tclstring):
@@ -1188,9 +1217,10 @@ class AVA:
                        append pythonlist \\\"$event\\\" , \n \
                    } \n\
                    return $pythonlist"
-        tclresult = self.tcl.eval(tclcode)
+        #tclresult = self.tcl.eval(tclcode)
         # This step is what converts the Tcl string to a list.
-        listofstrings = ast.literal_eval(tclresult)
+        #listofstrings = ast.literal_eval(tclresult)
+        listofstrings = self.Exec(tclcode)
 
         # Now convert each list element to a dictionary.
         for event in listofstrings:   
@@ -1201,8 +1231,9 @@ class AVA:
             tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
             tclcode += "}; append pythondict \}; return $pythondict"
 
-            tclresult = self.tcl.eval(tclcode)
-            eventdict = ast.literal_eval(tclresult)
+            #tclresult = self.tcl.eval(tclcode)
+            #eventdict = ast.literal_eval(tclresult)
+            eventdict = self.Exec(tclcode)
 
             # The "addtional" field may contain an additional list of information.
             # This is also converted into a dictionary.
@@ -1212,8 +1243,9 @@ class AVA:
                 tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
                 tclcode += "}; append pythondict \}; return $pythondict"
 
-                tclresult = self.tcl.eval(tclcode)
-                eventdict["additional"] = ast.literal_eval(tclresult)
+                #tclresult = self.tcl.eval(tclcode)
+                #eventdict["additional"] = ast.literal_eval(tclresult)
+                eventdict["additional"] = self.Exec(tclcode)
 
             eventlist.append(eventdict)
 
@@ -1252,6 +1284,16 @@ class AVA:
         return                
 
     #==============================================================================
+    def CleanupTcl(self):
+        """Attempt to clean up the Tcl subprocess.        
+        """        
+        self.tcl.stdin.close()
+        self.tcl.terminate()
+        self.tcl.wait(timeout=0.5)                
+
+        return        
+
+    #==============================================================================
     def __init__(self, apipath=None, logpath=None, loglevel="DEBUG"):
         """
         Load the Avalanche API and initialize the Python environment.
@@ -1261,6 +1303,8 @@ class AVA:
 
         Returns None.
         """
+
+        atexit.register(self.CleanupTcl)
 
         # Construct the log path.            
         if logpath:
@@ -1318,7 +1362,9 @@ class AVA:
         logging.info("Log Path     = " + self.logpath)
 
         # Instantiate the Tcl interpreter.
-        self.tcl = Tcl()
+        #self.tcl = Tcl()
+        shell_path = r"tclsh"
+        self.tcl = Popen(shell_path, stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines = True, bufsize = 0)
 
         #if logpath != None:
         #    self.tclinterp.tk.call('eval', 'set ::env(STC_LOG_OUTPUT_DIRECTORY) [pwd]')
@@ -1356,16 +1402,14 @@ class AVA:
             self.Exec('set ::auto_path "' + libpath + ' $::auto_path"')
             self.Exec('set ::auto_path "' + apipath + ' $::auto_path"')
             
-
-
         # Add the lib directory that is included with this module.
-        generallibpath = os.path.dirname(os.path.abspath(__file__)).replace('\\', '/')        
-        generallibpath = generallibpath + "/lib"
+        generallibpath = os.path.dirname(os.path.abspath(__file__))
+        generallibpath = os.path.join(generallibpath, "lib")
 
         if os.name == "nt":
-            oslibpath = generallibpath + "/windows"
+            oslibpath = os.path.join(generallibpath, "windows")
         elif os.name == "posix":
-            oslibpath = generallibpath + "/linux"
+            oslibpath = os.path.join(generallibpath, "linux")
         else:
             print("Unsupported OS:" + os.name)
 
@@ -1373,15 +1417,49 @@ class AVA:
         self.Exec('lappend ::auto_path [file normalize ' + oslibpath + ']')
 
         logging.info("-------------------------------------------------------------")
-        logging.info("Tcl Version  = " + self.tcl.eval("info patchlevel"))
-        logging.info("Tbcload Version  = " + self.tcl.eval("package require tbcload"))
-        logging.info("Tcl ::auto_path = " + self.tcl.eval('set ::auto_path'))
+        logging.info("Tcl Version  = " + self.Exec("info patchlevel"))
+        logging.info("Tbcload Version  = " + str(self.Exec("package require tbcload")))
+        logging.info("Tcl ::auto_path = " + self.Exec('set ::auto_path'))
         logging.info("-------------------------------------------------------------")
         logging.info("Loading the Avalanche API in the Tcl interpreter...")
         self.Exec("package require av")
 
         # I hate these status messages.
         self.StopStatusMsg("on")
+
+        # Add some commonly used Tcl functions to the Tcl interpreter here.
+
+        # Use Tcl to convert the list into a Python-friendly dict string.
+        tclcode =  "proc isnumeric value {                           \n\
+                        if {![catch {expr {abs($value)}}]} {         \n\
+                            return 1                                 \n\
+                        }                                            \n\
+                        set value [string trimleft $value 0]         \n\
+                        if {![catch {expr {abs($value)}}]} {         \n\
+                            return 1                                 \n\
+                        }                                            \n\
+                        return 0                                     \n\
+                    }                                                \n\
+                    proc tclList2Dict { args } {                     \n\
+                        set result $args                             \n\
+                        set output {}                                \n\
+                        foreach {key value} $result {                \n\
+                            regsub {^-} $key {} key                  \n\
+                            if { [isnumeric $value] } {              \n\
+                                append output \"'$key': $value, \"   \n\
+                            } else {                                 \n\
+                                regsub -all {'} $value {\\'} value   \n\
+                                regsub -all {\"} $value {\\\"} value \n\
+                                append output \"'$key': '$value', \" \n\
+                            }                                        \n\
+                        }                                            \n\
+                                                                     \n\
+                        regsub {, $} $output {} output               \n\
+                        set output [list $output]                    \n\
+                        return $output                               \n\
+                    }"
+        
+        self.Exec(tclcode)        
 
         return
 
