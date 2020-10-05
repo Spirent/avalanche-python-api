@@ -358,9 +358,7 @@ class AVA:
         tclcode = "av::perform " + command + " " + objecthandle
 
         if command == "SetInterfaceAttributes":
-            # Unfortunately, engineering has a sick sense of humor.
-            # This command IGNORES the argument names, and instead makes the arguments position dependent.
-            # One word...What.The.F%$#.
+            # WARNING: This AVA API command IGNORES the argument names, and instead makes the arguments position dependent.
             # av::perform SetInterfaceAttributes $tests_handle.topology.interface(1) -port 10.140.99.40/1/1 -physIf 0 -interfaceDisplayString 0,0 -interfaceLocationString 0,0
 
             port           = kwargs["port"] 
@@ -368,25 +366,24 @@ class AVA:
             display        = kwargs["interfaceDisplayString"]
             locationstring = kwargs["interfaceLocationString"]
 
-            tclcode += " -engineering " + port + " -please " + str(physIf) + " -fix " + display + " -this " + locationstring
+            tclcode += " -ignored1 " + str(port) + " -ignored2 " + str(physIf) + " -ignored3 " + str(display) + " -ignored4 " + str(locationstring)
 
         elif command == "Export":
             # For this command, the arguments MUST be in a specific order (don't ask me why).
-            test    = kwargs["projectstestshandles"] 
+            test = kwargs["projectstestshandles"] 
 
-            tclcode += " -projectstestshandles " + test
+            tclcode += " -projectstestshandles " + str(test)
 
             if "options" in kwargs:
-                tclcode += ' -options "' + kwargs["options"] + '"'
+                tclcode += ' -options "' + str(kwargs["options"]) + '"'
 
             if "newpath" in kwargs:
                 newpath = kwargs["newpath"]
-                tclcode += ' -newpath "' + kwargs["newpath"] + '"'            
+                tclcode += ' -newpath "' + str(kwargs["newpath"]) + '"'            
 
         else:
             for key in kwargs:
-                tclcode = tclcode + " " + "-" + key + ' "' + str(kwargs[key]) + '"'
-
+                tclcode = tclcode + " " + "-" + str(key) + ' "' + str(kwargs[key]) + '"'
 
         result = self.Exec(tclcode)
         logging.debug(" - Python result  - " + str(result))
