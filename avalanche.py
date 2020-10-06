@@ -590,7 +590,7 @@ class AVA:
             av.getEvents        
         """
         self.LogCommand()
-        tclcode = "av::getEvents"
+        tclcode = "av::getEvents"        
 
         tclresult = self.Exec(tclcode)
 
@@ -602,14 +602,14 @@ class AVA:
         # is a Avalanche Event dictionary with the keys "message", "additional" and "name".
         # The "additional" key is also a dictionary.
         eventlist = []
-
+        
         # First step is to break the Tcl list into a Python list (using Tcl).
         tclcode =  "set pythonlist {};"
         tclcode += "foreach event [list " + tclresult + "] {"
         tclcode += "    regsub -all {\\n} $event {} event;"
         tclcode += "    append pythonlist \\\"$event\\\" , "
         tclcode += "};"        
-        tclcode += "return $pythonlist"
+        tclcode += "puts $pythonlist"
         #tclresult = self.Exec(tclcode)
         # This step is what converts the Tcl string to a list.
         #listofstrings = ast.literal_eval(tclresult)
@@ -622,11 +622,11 @@ class AVA:
             tclcode =  "set pythondict \{;"
             tclcode += "foreach element [list " + event + "] {"
             tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
-            tclcode += "}; append pythondict \}; return $pythondict"
+            tclcode += "}; append pythondict \}; puts $pythondict"
 
             #tclresult = self.tcl.eval(tclcode)
             #eventdict = ast.literal_eval(tclresult)
-            eventdict = self.Exec(tclcode)
+            eventdict = self.Exec(tclcode)            
 
             # The "addtional" field may contain an additional list of information.
             # This is also converted into a dictionary.
@@ -634,7 +634,7 @@ class AVA:
                 tclcode  = "set pythondict \{;"
                 tclcode += "foreach element [list " + eventdict["additional"] + "] {"
                 tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
-                tclcode += "}; append pythondict \}; return $pythondict"
+                tclcode += "}; append pythondict \}; puts $pythondict"
 
                 #tclresult = self.tcl.eval(tclcode)
                 #eventdict["additional"] = ast.literal_eval(tclresult)
@@ -1162,7 +1162,7 @@ class AVA:
         stop = False
         cmd_exception = False
         while not stop:                
-            line = self.tcl.stdout.readline()
+            line = self.tcl.stdout.readline()            
 
             if re.search("tcl_cmd_success", line):
                 stop = True
@@ -1427,34 +1427,36 @@ class AVA:
         # Add some commonly used Tcl functions to the Tcl interpreter here.
 
         # Use Tcl to convert the list into a Python-friendly dict string.
-        tclcode =  "proc isnumeric value {                           \n\
-                        if {![catch {expr {abs($value)}}]} {         \n\
-                            return 1                                 \n\
-                        }                                            \n\
-                        set value [string trimleft $value 0]         \n\
-                        if {![catch {expr {abs($value)}}]} {         \n\
-                            return 1                                 \n\
-                        }                                            \n\
-                        return 0                                     \n\
-                    }                                                \n\
-                    proc tclList2Dict { args } {                     \n\
-                        set result $args                             \n\
-                        set output {}                                \n\
-                        foreach {key value} $result {                \n\
-                            regsub {^-} $key {} key                  \n\
-                            if { [isnumeric $value] } {              \n\
-                                append output \"'$key': $value, \"   \n\
-                            } else {                                 \n\
-                                regsub -all {'} $value {\\'} value   \n\
-                                regsub -all {\"} $value {\\\"} value \n\
-                                append output \"'$key': '$value', \" \n\
-                            }                                        \n\
-                        }                                            \n\
-                                                                     \n\
-                        regsub {, $} $output {} output               \n\
-                        set output [list $output]                    \n\
-                        return $output                               \n\
-                    }"
+        tclcode =  """proc isnumeric value {                         
+                          if {![catch {expr {abs($value)}}]} {         
+                              return 1                                 
+                          }                                            
+                          set value [string trimleft $value 0]         
+                          if {![catch {expr {abs($value)}}]} {         
+                              return 1                                 
+                          }                                            
+                          return 0                                     
+                      }"""
+        self.Exec(tclcode)        
+
+        tclcode = """proc tclList2Dict { args } {                     
+                         set result $args                             
+                         set output {}                                
+                         foreach {key value} $result {                
+                             regsub {^-} $key {} key                  
+                             if { [isnumeric $value] } {              
+                                 append output \"'$key': $value, \"   
+                             } else {                                 
+                                 regsub -all {'} $value {\\'} value   
+                                 regsub -all {\"} $value {\\\"} value 
+                                 append output \"'$key': '$value', \" 
+                             }                                        
+                         }                                            
+                                                                      
+                         regsub {, $} $output {} output               
+                         set output [list $output]                    
+                         return $output                               
+                     }"""
         
         self.Exec(tclcode)        
 
