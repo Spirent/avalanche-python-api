@@ -1291,11 +1291,15 @@ class AVA:
         return        
 
     #==============================================================================
-    def __init__(self, apipath=None, logpath=None, loglevel="DEBUG"):
+    def __init__(self, apipath=None, tclinterpreter=None, tcllibpath=None, logpath=None, loglevel="DEBUG"):
         """
         Load the Avalanche API and initialize the Python environment.
 
         'apipath' optionally specifies the location of the Avalanche API installation.
+        'tclinterpreter' optionally specifies the Tclsh interpreter to use.
+        'tcllibpath' optionally specifies the path to additional Tcl libraries. The default Tcl libraries 
+                     and the __file__/lib directory are also used, but are overridden by the packages found 
+                     on this path.
         'logpath' optionally specifies the location where the logs are to be stored.
 
         Returns None.
@@ -1358,10 +1362,21 @@ class AVA:
         logging.info("Current Path = " + os.path.abspath(os.getcwd()))   
         logging.info("Log Path     = " + self.logpath)
 
+        # # Instantiate the Tcl interpreter.
+        # #self.tcl = Tcl()
+        # shell_path = r"tclsh"
+        # self.tcl = Popen(shell_path, stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines = True, bufsize = 0)
+
         # Instantiate the Tcl interpreter.
-        #self.tcl = Tcl()
-        shell_path = r"tclsh"
-        self.tcl = Popen(shell_path, stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines = True, bufsize = 0)
+        if tclinterpreter:
+            self.tcl_path = tclinterpreter.encode('unicode-escape').decode()            
+        else:
+            self.tcl_path = "tclsh"
+
+        logging.info("-------------------------------------------------------------")
+        logging.info("Tcl interpreter  = " + self.tcl_path)          
+
+        self.tcl = Popen(self.tcl_path, stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines = True, bufsize = 0)                  
 
         #if logpath != None:
         #    self.tclinterp.tk.call('eval', 'set ::env(STC_LOG_OUTPUT_DIRECTORY) [pwd]')
@@ -1373,47 +1388,32 @@ class AVA:
         #   msgcat
         #   ...there may be others        
         # Most are NOT included with the Avalanche API, so I have included them with
-        # this wrapper in the ./lib subdirectory.
+        # this wrapper in the ./lib subdirectory.          
+  
+        if tcllibpath:
+            # Add the user-defined path to the front of the list. This will ensure that it is used over all other libraries.
+            tcllibpath = os.path.abspath(tcllibpath)
+            self.Exec('set ::auto_path "[file normalize ' + tcllibpath + '] $::auto_path"')
 
-        if apipath:     
-            # Add the path to the API so that Tcl can find it.
-            #libpath = apipath + "/lib"        
-            #libpath = "C:/Tcl/ActiveTcl8.6.9_64bit/lib"
-
-            # I HIGHLY recommend creating a lib directory in the same directory as the Avalanche Python wrapper.
-            libpath = os.path.dirname(__file__)
-            libpath = os.path.abspath(libpath)
-            libpath = os.path.join(libpath, "lib")
-
-            # Add brackets just in case the path has spaces.
-            apipath = "{" + apipath + "}"
-            libpath = "{" + libpath + "}"
-
-            # Use this code if you want the TCLLIBPATH environment variable to be able 
-            # to override the auto_path used by a script.            
-            #self.Exec('lappend ::auto_path ' + apipath)
-            #self.Exec('lappend ::auto_path ' + libpath)
-
-            # This code makes sure that the Python wrapper always uses the exact path
-            # specified by av.init(apipath).
-            self.Exec('set ::auto_path "' + libpath + ' $::auto_path"')
-            self.Exec('set ::auto_path "' + apipath + ' $::auto_path"')
-            
-        # Add the lib directory that is included with this module.
+        # Include the "lib" directory that may, or may not, exist in the same path as this file.
         generallibpath = os.path.dirname(os.path.abspath(__file__))
         generallibpath = os.path.join(generallibpath, "lib")
 
+        oslibpath = None
         if os.name == "nt":
             oslibpath = os.path.join(generallibpath, "windows")
         elif os.name == "posix":
             oslibpath = os.path.join(generallibpath, "linux")
-        else:
-            print("Unsupported OS:" + os.name)
 
-        self.Exec('lappend ::auto_path [file normalize ' + generallibpath + ']')
-        self.Exec('lappend ::auto_path [file normalize ' + oslibpath + ']')
+        apipath = apipath.encode('unicode-escape').decode()        
+        generallibpath = generallibpath.encode('unicode-escape').decode()
+        if oslibpath:
+            oslibpath = oslibpath.encode('unicode-escape').decode()                   
 
-        logging.info("-------------------------------------------------------------")
+        self.Exec('lappend ::auto_path [file normalize {' + generallibpath + '}]')
+        self.Exec('lappend ::auto_path [file normalize {' + oslibpath + '}]')
+        self.Exec('lappend ::auto_path [file normalize {' + apipath + '}]')
+
         logging.info("Tcl Version  = " + self.Exec("info patchlevel"))
         logging.info("Tbcload Version  = " + str(self.Exec("package require tbcload")))
         logging.info("Tcl ::auto_path = " + self.Exec('set ::auto_path'))
