@@ -1213,7 +1213,7 @@ class AVA:
                    foreach event [list " + tclstring + "] {\n \
                        append pythonlist \\\"$event\\\" , \n \
                    } \n\
-                   return $pythonlist"
+                   puts $pythonlist"
         #tclresult = self.tcl.eval(tclcode)
         # This step is what converts the Tcl string to a list.
         #listofstrings = ast.literal_eval(tclresult)
@@ -1226,7 +1226,7 @@ class AVA:
             tclcode =  "set pythondict \{;"
             tclcode += "foreach element [list " + event + "] {"
             tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
-            tclcode += "}; append pythondict \}; return $pythondict"
+            tclcode += "}; append pythondict \}; puts $pythondict"
 
             #tclresult = self.tcl.eval(tclcode)
             #eventdict = ast.literal_eval(tclresult)
@@ -1238,7 +1238,7 @@ class AVA:
                 tclcode  = "set pythondict \{;"
                 tclcode += "foreach element [list " + eventdict["additional"] + "] {"
                 tclcode += "    append pythondict \"\\\"[lindex $element 0]\\\": \\\"[lindex $element 1]\\\", \""
-                tclcode += "}; append pythondict \}; return $pythondict"
+                tclcode += "}; append pythondict \}; puts $pythondict"
 
                 #tclresult = self.tcl.eval(tclcode)
                 #eventdict["additional"] = ast.literal_eval(tclresult)
